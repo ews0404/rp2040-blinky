@@ -11,6 +11,10 @@ fn panic(_info: &PanicInfo) -> ! {
     loop {}
 }
 
+#[unsafe(link_section = ".boot2")]
+#[used]
+pub static BOOT2: [u8; 256] = rp2040_boot2::BOOT_LOADER_GENERIC_03H;
+
 const XOSC_CRYSTAL_FREQ: u32 = 12_000_000;
 
 #[hal::entry]
@@ -40,9 +44,9 @@ fn main() -> ! {
     let mut led_pin = pins.gpio25.into_push_pull_output();
 
     loop {
+        led_pin.set_high().unwrap();
+        timer.delay_ms(500);
         led_pin.set_low().unwrap();
-        // timer.delay_ms(50);
-        // led_pin.set_low().unwrap();
-        // timer.delay_ms(50);
+        timer.delay_ms(500);
     }
 }

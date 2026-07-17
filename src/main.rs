@@ -73,9 +73,8 @@ fn main() -> ! {
         .device_class(0x02) // CDC class ID
         .build();
     let mut usb_rx_buff=[0u8; 64];
+    let mut usb_tx_buff=[0u8; 64];
 
-
-    led_pin.set_high();
     let mut timestamp = timer.get_counter();
     loop {
 
@@ -83,7 +82,15 @@ fn main() -> ! {
         if usb_dev.poll(&mut [&mut serial]){
             match serial.read(&mut usb_rx_buff){
                 Ok(0)=>{}
-                Ok(_count)=>{}
+                Ok(count)=>{
+                    // blink LED high on activity (cant see it on release version), echo message in caps
+                    led_pin.set_high();
+                    for x in &mut usb_rx_buff[..count] {
+                        if (*x>=0x61)&&(*x<=0x7A){ *x &= 0xDF; }
+                    }
+                    let _=serial.write(&usb_rx_buff[..count]);
+                    led_pin.set_low();
+                }
                 Err(_e)=>{}
             }
         }
@@ -92,7 +99,6 @@ fn main() -> ! {
         if(timer.get_counter()-timestamp).to_millis()>=1000{
             let _=serial.write(b"foo\r\n");
             timestamp=timer.get_counter();
-            led_pin.toggle();
         }
     }
 }

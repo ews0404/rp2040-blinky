@@ -1,24 +1,36 @@
 #![no_std]
 #![no_main]
 
-use core::panic::PanicInfo;
-use embedded_hal::delay::DelayNs;
-use embedded_hal::digital::OutputPin;
+// HAL (not BSP)
 use rp2040_hal as hal;
 
+// gpio
+use embedded_hal::digital::StatefulOutputPin;
+use embedded_hal::digital::OutputPin;
+
+// USB serial driver
+use usb_device::{class_prelude::*, prelude::*};
+use usbd_serial::SerialPort;
+
+// local panic handler def
+use core::panic::PanicInfo;
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
     loop {}
 }
 
+
+// this is done by pico BSP, but must be done manually for HAL
 #[unsafe(link_section = ".boot2")]
 #[used]
 pub static BOOT2: [u8; 256] = rp2040_boot2::BOOT_LOADER_GENERIC_03H;
 
+// crystal oscillator speed
 const XOSC_CRYSTAL_FREQ: u32 = 12_000_000;
 
 #[hal::entry]
 fn main() -> ! {
+    // init chip, set up clocks
     let mut pac = hal::pac::Peripherals::take().unwrap();
     let mut watchdog = hal::Watchdog::new(pac.WATCHDOG);
     let clocks = hal::clocks::init_clocks_and_plls(
@@ -31,9 +43,9 @@ fn main() -> ! {
         &mut watchdog,
     )
     .unwrap();
+    let timer = hal::Timer::new(pac.TIMER, &mut pac.RESETS, &clocks);
 
-    let mut timer = hal::Timer::new(pac.TIMER, &mut pac.RESETS, &clocks);
-    
+    // gpio init
     let sio = hal::Sio::new(pac.SIO);
     let pins = hal::gpio::Pins::new(
         pac.IO_BANK0,
@@ -43,10 +55,44 @@ fn main() -> ! {
     );
     let mut led_pin = pins.gpio25.into_push_pull_output();
 
+    // usb serial init
+    let usb_bus = UsbBusAllocator::new(hal::usb::UsbBus::new(
+        pac.USBCTRL_REGS,
+        pac.USBCTRL_DPRAM,
+        clocks.usb_clock,
+        true,
+        &mut pac.RESETS,
+    ));
+    let mut serial = SerialPort::new(&usb_bus);
+    let mut usb_dev = UsbDeviceBuilder::new(&usb_bus, UsbVidPid(0x16C0, 0x27DD))
+        .strings(&[StringDescriptors::default()
+        .manufacturer("OpenStar")
+        .product("my serial port")
+        .serial_number("666")
+        ]).unwrap()
+        .device_class(0x02) // CDC class ID
+        .build();
+    let mut usb_rx_buff=[0u8; 64];
+
+
+    led_pin.set_high();
+    let mut timestamp = timer.get_counter();
     loop {
-        led_pin.set_high().unwrap();
-        timer.delay_ms(500);
-        led_pin.set_low().unwrap();
-        timer.delay_ms(500);
+
+        // call every 10 ms to keep USB alive
+        if usb_dev.poll(&mut [&mut serial]){
+            match serial.read(&mut usb_rx_buff){
+                Ok(0)=>{}
+                Ok(_count)=>{}
+                Err(_e)=>{}
+            }
+        }
+
+        // send something
+        if(timer.get_counter()-timestamp).to_millis()>=1000{
+            let _=serial.write(b"foo\r\n");
+            timestamp=timer.get_counter();
+            led_pin.toggle();
+        }
     }
 }

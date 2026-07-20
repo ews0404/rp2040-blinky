@@ -5,12 +5,17 @@
 use rp2040_hal as hal;
 
 // gpio
-use embedded_hal::digital::StatefulOutputPin;
 use embedded_hal::digital::OutputPin;
 
 // USB serial driver
 use usb_device::{class_prelude::*, prelude::*};
 use usbd_serial::SerialPort;
+
+// UART
+use hal::fugit::RateExtU32;
+use hal::clocks::Clock;
+use hal::uart::{DataBits, StopBits, UartConfig};
+
 
 // local panic handler def
 use core::panic::PanicInfo;
@@ -73,7 +78,21 @@ fn main() -> ! {
         .device_class(0x02) // CDC class ID
         .build();
     let mut usb_rx_buff=[0u8; 64];
-    let mut usb_tx_buff=[0u8; 64];
+
+    // uart init
+     let uart_pins = (
+        // UART TX (characters sent from RP2040) on pin 1 (GPIO0)
+        pins.gpio0.into_function(),
+        // UART RX (characters received by RP2040) on pin 2 (GPIO1)
+        pins.gpio1.into_function(),
+    );
+    let uart = hal::uart::UartPeripheral::new(pac.UART0, uart_pins, &mut pac.RESETS)
+        .enable(
+            UartConfig::new(115200.Hz(), DataBits::Eight, None, StopBits::One),
+            clocks.peripheral_clock.freq(),
+        )
+        .unwrap();
+    let mut uart_rx_buff=[0u8; 64];
 
     let mut timestamp = timer.get_counter();
     loop {
@@ -83,12 +102,19 @@ fn main() -> ! {
             match serial.read(&mut usb_rx_buff){
                 Ok(0)=>{}
                 Ok(count)=>{
+
                     // blink LED high on activity (cant see it on release version), echo message in caps
                     led_pin.set_high();
                     for x in &mut usb_rx_buff[..count] {
                         if (*x>=0x61)&&(*x<=0x7A){ *x &= 0xDF; }
                     }
-                    let _=serial.write(&usb_rx_buff[..count]);
+
+                    // needless uart write/read step
+                    uart.write_full_blocking(&usb_rx_buff);
+                    uart.read_full_blocking(& mut uart_rx_buff).unwrap();
+
+                    // back out the usb
+                    let _=serial.write(&uart_rx_buff);
                     led_pin.set_low();
                 }
                 Err(_e)=>{}

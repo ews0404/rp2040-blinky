@@ -717,6 +717,7 @@ dependencies = [
  "cortex-m",
  "cortex-m-rt",
  "embedded-hal 1.0.0",
+ "embedded-io 0.7.1",
  "rp2040-boot2",
  "rp2040-hal",
  "usb-device",

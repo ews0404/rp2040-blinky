@@ -11,6 +11,7 @@ cortex-m-rt = "0.7.5"
 rp2040-boot2 = "0.3.0"
 usb-device = "0.3.2"
 usbd-serial = "0.2.2"
+embedded-io = "0.7.1"
 
 [[bin]]
 name = "rp2040-blinky"

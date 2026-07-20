@@ -3,6 +3,7 @@
 
 // HAL (not BSP)
 use rp2040_hal as hal;
+use embedded_io::Write;
 
 // gpio
 use embedded_hal::digital::OutputPin;
@@ -95,6 +96,7 @@ fn main() -> ! {
     let mut uart_rx_buff=[0u8; 64];
 
     let mut timestamp = timer.get_counter();
+    let mut write_buf=[0u8; 64];
     loop {
 
         // call every 10 ms to keep USB alive
@@ -123,7 +125,8 @@ fn main() -> ! {
 
         // send something
         if(timer.get_counter()-timestamp).to_millis()>=1000{
-            let _=serial.write(b"foo\r\n");
+            write!(&mut write_buf[..], "{}\r\n", timestamp).expect("can't write to buffer");
+            let _=serial.write(&write_buf);
             timestamp=timer.get_counter();
         }
     }

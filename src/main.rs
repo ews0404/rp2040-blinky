@@ -82,10 +82,8 @@ fn main() -> ! {
 
     // uart init
      let uart_pins = (
-        // UART TX (characters sent from RP2040) on pin 1 (GPIO0)
-        pins.gpio0.into_function(),
-        // UART RX (characters received by RP2040) on pin 2 (GPIO1)
-        pins.gpio1.into_function(),
+        pins.gpio0.into_function::<hal::gpio::FunctionUart>(), // uart Tx, pin 1
+        pins.gpio1.into_function::<hal::gpio::FunctionUart>()  // uart Rx, pin 2
     );
     let uart = hal::uart::UartPeripheral::new(pac.UART0, uart_pins, &mut pac.RESETS)
         .enable(
@@ -95,6 +93,11 @@ fn main() -> ! {
         .unwrap();
     let mut uart_rx_buff=[0u8; 64];
 
+    // ADC init
+    let mut adc = hal::Adc::new(pac.ADC, &mut pac.RESETS);
+    let mut adc_pin_2 = hal::adc::AdcPin::new(pins.gpio28).unwrap();
+
+    // main loop
     let mut timestamp = timer.get_counter();
     let mut write_buf=[0u8; 64];
     loop {
@@ -107,27 +110,33 @@ fn main() -> ! {
 
                     // blink LED high on activity (cant see it on release version), echo message in caps
                     led_pin.set_high();
+
+                    // convert lower case letters to caps, ugly hack
                     for x in &mut usb_rx_buff[..count] {
                         if (*x>=0x61)&&(*x<=0x7A){ *x &= 0xDF; }
                     }
 
-                    // needless uart write/read step
+                    // needless uart write/read step (uart0 Tx and Rx pins soldered together)
                     uart.write_full_blocking(&usb_rx_buff);
                     uart.read_full_blocking(& mut uart_rx_buff).unwrap();
 
                     // back out the usb
                     let _=serial.write(&uart_rx_buff);
+
+                    // write done, turn off LED
                     led_pin.set_low();
                 }
                 Err(_e)=>{}
             }
         }
 
-        // send something
+        // send timestamp and adc_2 reading
         if(timer.get_counter()-timestamp).to_millis()>=1000{
-            write!(&mut write_buf[..], "{}\r\n", timestamp).expect("can't write to buffer");
+            let adc_2_val:u16 = adc.read(&mut adc_pin_2).unwrap();
+            write!(&mut write_buf[..], "t:{}, a:{}\r\n", timestamp, adc_2_val).expect("can't write to buffer");
             let _=serial.write(&write_buf);
             timestamp=timer.get_counter();
+            for x in &mut write_buf[..64]{ *x=0xF; } // overwrite buffer with non-zero values
         }
     }
 }

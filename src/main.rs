@@ -9,7 +9,7 @@ use embedded_io::Write;
 use rp2040_hal as hal;
 
 // gpio
-use embedded_hal::digital::OutputPin;
+use embedded_hal::digital::{InputPin, OutputPin};
 
 // USB serial driver
 use usb_device::{class_prelude::*, prelude::*};
@@ -60,6 +60,7 @@ fn main() -> ! {
         &mut pac.RESETS,
     );
     let mut led_pin = pins.gpio25.into_push_pull_output();
+    let mut btn_pin = pins.gpio5.into_pull_up_input();
 
     // USB
     let usb_bus = UsbBusAllocator::new(hal::usb::UsbBus::new(
@@ -160,13 +161,16 @@ fn main() -> ! {
             }
         }
 
-        // send timestamp and adc_2 reading
+        // send timestamp and adc_2/button reading
         if (timer.get_counter() - timestamp).to_millis() >= 1000 {
             // adc read
             let adc_2_val: u16 = adc.read(&mut adc_pin_2).unwrap();
 
+            // button read
+            let btn_val = btn_pin.is_high().unwrap();
+
             // write into byte buffer
-            write!(&mut write_buf[..], "t:{}, a:{}\r\n", timestamp, adc_2_val)
+            write!(&mut write_buf[..], "t:{}, b:{}, a:{}\r\n", timestamp, btn_val, adc_2_val)
                 .expect("can't write to buffer");
             let _ = serial.write(&write_buf);
             for x in &mut write_buf[..64] {

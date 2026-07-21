@@ -2,7 +2,7 @@
 #![no_main]
 
 use embedded_hal::pwm::SetDutyCycle;
-use rp2040_hal::Clock;
+use rp2040_hal::{Clock, pwm};
 
 // HAL (not BSP)
 use embedded_io::Write;
@@ -110,22 +110,20 @@ fn main() -> ! {
         // txf0
         pwm_slices.pwm1.set_div_int(PWM_DIV);
         pwm_slices.pwm1.set_top(PWM_TOP);
-        pwm_slices.pwm1.channel_a.set_duty_cycle(PWM_TOP / 2);
+        pwm_slices.pwm1.channel_a.set_duty_cycle_fraction(PWM_TOP/2, PWM_TOP);
         pwm_slices.pwm1.channel_a.output_to(pins.gpio2);
+        let pwm1_mask = 0x01 << 1;
 
         // txf1
         pwm_slices.pwm2.set_div_int(PWM_DIV);
         pwm_slices.pwm2.set_top(PWM_TOP);
-        pwm_slices.pwm2.channel_a.set_duty_cycle(PWM_TOP / 2);
+        pwm_slices.pwm2.channel_a.set_duty_cycle_fraction(PWM_TOP/2, PWM_TOP);
         pwm_slices.pwm2.channel_a.output_to(pins.gpio4);
-
-        // add quadrature offset
-        for _i in 0..PWM_TOP / 4 {
-            pwm_slices.pwm2.advance_phase();
-        }
+        pwm_slices.pwm2.set_counter(PWM_TOP/4); // set quadrature phase
+        let pwm2_mask = 0x01 << 2;
 
         // enable both PWM slices simultaneously
-        pwm_slices.enable_simultaneous(0xFF);
+        pwm_slices.enable_simultaneous(pwm1_mask|pwm2_mask);
     }
 
     // main loop

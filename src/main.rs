@@ -2,7 +2,7 @@
 #![no_main]
 
 use embedded_hal::pwm::SetDutyCycle;
-use rp2040_hal::{Clock, pwm};
+use rp2040_hal::Clock;
 
 // HAL (not BSP)
 use embedded_io::Write;
